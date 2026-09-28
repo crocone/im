@@ -148,7 +148,10 @@ export class Environment {
   private buildSkyline(assets: Assets) {
     const rnd = seeded(4242);
     const root = assets.scene('skyline');
-    const variants = [0, 1, 2, 3].map((i) => new InstancedKit(root.getObjectByName(`Skyline_${i}`)!, 160, false, false));
+    const variants: InstancedKit[] = [];
+    for (let i = 0; root.getObjectByName(`Skyline_${i}`); i++) {
+      variants.push(new InstancedKit(root.getObjectByName(`Skyline_${i}`)!, 200, false, false));
+    }
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const s = new THREE.Vector3();
@@ -164,7 +167,7 @@ export class Environment {
       const w = 0.8 + rnd() * 0.7;
       s.set(w, h, w);
       m.compose(p, q, s);
-      variants[Math.floor(rnd() * 4)].add(m);
+      variants[Math.floor(rnd() * variants.length)].add(m);
     }
     for (const v of variants) {
       v.finish();

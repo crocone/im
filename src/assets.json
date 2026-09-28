@@ -13,6 +13,7 @@
     "nodes": ["Boss", "Torso", "Core", "Arm_L", "Arm_R", "Leg_L", "Leg_R", "Shield", "Muzzle_Arm_L", "Muzzle_Arm_R",
       "RackMuzzle_L", "RackMuzzle_R", "Thruster_0", "Thruster_1", "Thruster_2", "Thruster_3", "LegThruster_L", "LegThruster_R"]
   },
+  "cityMaterials": { "file": "city_materials.glb", "nodes": ["CityMaterials"] },
   "missile": { "file": "missile.glb", "nodes": ["Missile", "Body", "Exhaust"] },
   "miniMissile": { "file": "mini_missile.glb", "nodes": ["MiniMissile", "Body", "Exhaust"] },
   "building_01": { "file": "building_01.glb", "nodes": ["building_01", "Render"], "colliders": true },

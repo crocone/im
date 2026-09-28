@@ -244,6 +244,38 @@ def pattern(kind, seed, size):
     raise ValueError(kind)
 
 
+def attach_maps(mat, albedo_img=None, orm_img=None, normal_img=None, normal_strength=1.0):
+    """Wire albedo / packed ORM / normal images into a material made by ``common.material``."""
+    nt = mat.node_tree
+    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    if albedo_img is not None:
+        t_albedo = nt.nodes.new("ShaderNodeTexImage")
+        t_albedo.image = albedo_img
+        nt.links.new(t_albedo.outputs["Color"], common._socket(bsdf, "Base Color"))
+    if orm_img is not None:
+        t_orm = nt.nodes.new("ShaderNodeTexImage")
+        t_orm.image = orm_img
+        sep = nt.nodes.new("ShaderNodeSeparateColor")
+        nt.links.new(t_orm.outputs["Color"], sep.inputs[0])
+        nt.links.new(sep.outputs[1], common._socket(bsdf, "Roughness"))
+        nt.links.new(sep.outputs[2], common._socket(bsdf, "Metallic"))
+        grp = nt.nodes.new("ShaderNodeGroup")
+        grp.node_tree = gltf_output_group()
+        nt.links.new(sep.outputs[0], grp.inputs["Occlusion"])
+    if normal_img is not None:
+        t_n = nt.nodes.new("ShaderNodeTexImage")
+        t_n.image = normal_img
+        nmap = nt.nodes.new("ShaderNodeNormalMap")
+        nmap.inputs["Strength"].default_value = normal_strength
+        nt.links.new(t_n.outputs["Color"], nmap.inputs["Color"])
+        nt.links.new(nmap.outputs["Normal"], common._socket(bsdf, "Normal"))
+    return mat
+
+
+def image(name, arr, non_color=False):
+    return _image(name, arr, non_color)
+
+
 def pbr_material(name, color, metallic, roughness, kind="panels", seed=1, size=512, normal_strength=1.0,
                  bump=2.2, wear=0.35, grime=0.4, variation=0.07, painted=False, emission=None, strength=0.0,
                  coat=0.0, stripes=None):
@@ -260,26 +292,9 @@ def pbr_material(name, color, metallic, roughness, kind="panels", seed=1, size=5
     if nkey not in _MAPS:
         _MAPS[nkey] = normal_map(pat["height"], bump)
     mat = common.material(name, color, metallic, roughness, emission, strength)
-    nt = mat.node_tree
-    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
-    t_albedo = nt.nodes.new("ShaderNodeTexImage")
-    t_albedo.image = _image(f"{name}_albedo", albedo, False)
-    nt.links.new(t_albedo.outputs["Color"], common._socket(bsdf, "Base Color"))
-    t_orm = nt.nodes.new("ShaderNodeTexImage")
-    t_orm.image = _image(f"{name}_orm", orm, True)
-    sep = nt.nodes.new("ShaderNodeSeparateColor")
-    nt.links.new(t_orm.outputs["Color"], sep.inputs[0])
-    nt.links.new(sep.outputs[1], common._socket(bsdf, "Roughness"))
-    nt.links.new(sep.outputs[2], common._socket(bsdf, "Metallic"))
-    grp = nt.nodes.new("ShaderNodeGroup")
-    grp.node_tree = gltf_output_group()
-    nt.links.new(sep.outputs[0], grp.inputs["Occlusion"])
-    t_n = nt.nodes.new("ShaderNodeTexImage")
-    t_n.image = _image(f"N_{kind}_{seed}_{size}", _MAPS[nkey], True)
-    nmap = nt.nodes.new("ShaderNodeNormalMap")
-    nmap.inputs["Strength"].default_value = normal_strength
-    nt.links.new(t_n.outputs["Color"], nmap.inputs["Color"])
-    nt.links.new(nmap.outputs["Normal"], common._socket(bsdf, "Normal"))
+    attach_maps(mat, _image(f"{name}_albedo", albedo, False), _image(f"{name}_orm", orm, True),
+                _image(f"N_{kind}_{seed}_{size}_{bump:g}", _MAPS[nkey], True), normal_strength)
+    bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
     if coat > 0:
         c = common._socket(bsdf, "Coat Weight", "Clearcoat")
         if c is not None:

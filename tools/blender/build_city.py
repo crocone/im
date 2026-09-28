@@ -15,28 +15,67 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from common import (  # noqa: E402
-    box, box_uv, chamfered_rect, collider, cylinder, empty, export, hull, icosphere, join, log, loft,
-    material, parent_keep, prism, rect, regular_polygon, reset_scene, tube,
+    box, box_uv, chamfered_rect, collider, cylinder, empty, export, hull, icosphere, join, lathe, log, loft,
+    material, parent_keep, prism, rect, regular_polygon, reset_scene, rloft, sweep, tube,
 )
+import facades  # noqa: E402
+import pbr  # noqa: E402
 from textures import (  # noqa: E402
-    FACADE_SPAN, ad_texture, facade_images, helipad_texture, image, intersection_texture,
-    paving_texture, road_texture, roof_texture, skyline_texture,
+    FACADE_SPAN, ad_texture, helipad_texture, image, junction_set, paving_set, road_set, skyline_texture,
 )
 
 
 # --------------------------------------------------------------------------- materials
 
 
-FACADE_PBR = {
-    "office": (0.55, 0.15, 2.0), "glass": (0.2, 0.55, 2.0), "band": (0.5, 0.2, 2.0),
-    "brick": (0.82, 0.0, 2.0), "industrial": (0.45, 0.55, 2.0), "residential": (0.75, 0.0, 2.0),
+# Shared, heavily textured materials live in one library GLB (city_materials.glb). Building files
+# carry untextured placeholders with the same names; the runtime swaps in the library versions,
+# so every facade / roof / concrete texture is downloaded and uploaded to the GPU exactly once.
+FACADE_NAMES = {"office": "office", "glass": "glass", "band": "band", "brick": "brick", "industrial": "metal",
+                "residential": "residential"}
+LIBRARY = {  # key: (material name, placeholder colour, metallic, roughness)
+    "office": ("Facade_Office", (0.4, 0.39, 0.37), 0.2, 0.6),
+    "glass": ("Facade_Glass", (0.2, 0.25, 0.3), 0.7, 0.2),
+    "band": ("Facade_Band", (0.45, 0.44, 0.42), 0.2, 0.6),
+    "brick": ("Facade_Brick", (0.3, 0.15, 0.1), 0.0, 0.85),
+    "industrial": ("Facade_Industrial", (0.28, 0.3, 0.32), 0.6, 0.5),
+    "residential": ("Facade_Residential", (0.55, 0.5, 0.42), 0.0, 0.8),
+    "roof": ("Roof_Tar", (0.15, 0.15, 0.155), 0.0, 0.9),
+    "concrete": ("Concrete", (0.44, 0.43, 0.4), 0.0, 0.85),
+    "metal": ("Metal_Panel", (0.34, 0.36, 0.39), 0.85, 0.4),
+    "storefront": ("Storefront", (0.3, 0.3, 0.3), 0.3, 0.4),
 }
+UV_TILE = {"concrete": 4.0, "metal": 6.0}
 
 
-def _facade(style):
-    rough, metal, strength = FACADE_PBR[style]
-    b, e = facade_images("metal" if style == "industrial" else style)
-    return material(f"Facade_{style.capitalize()}", (1, 1, 1), metal, rough, (1, 1, 1), strength, b, e)
+def _library(key):
+    """Fully textured library material (albedo / ORM / normal, emission for lit windows)."""
+    name, color, metal, rough = LIBRARY[key]
+    if key in FACADE_NAMES:
+        maps = facades.facade_maps(FACADE_NAMES[key])
+        emit = pbr.image(f"{name}_emit", maps["emit"])
+        mat = material(name, (1, 1, 1), metal, rough, (1, 1, 1), 1.4, pbr.image(f"{name}_albedo", maps["albedo"]), emit)
+    elif key == "storefront":
+        maps = facades.storefront_set()
+        emit = pbr.image(f"{name}_emit", maps["emit"])
+        mat = material(name, (1, 1, 1), metal, rough, (1, 1, 1), 1.3, pbr.image(f"{name}_albedo", maps["albedo"]), emit)
+    else:
+        maps = {"roof": facades.roof_set, "concrete": facades.concrete_set, "metal": facades.metal_panel_set}[key]()
+        mat = material(name, (1, 1, 1), metal, rough, base_tex=pbr.image(f"{name}_albedo", maps["albedo"]))
+    pbr.attach_maps(mat, None, pbr.image(f"{name}_orm", maps["orm"], True), pbr.image(f"{name}_normal", maps["normal"], True))
+    return mat
+
+
+def _surface(name, maps):
+    """Street surface material from a generated map set (albedo is already in sRGB)."""
+    mat = material(name, (1, 1, 1), 0.0, 0.88, base_tex=pbr.image(f"{name}_albedo", maps["albedo"]))
+    pbr.attach_maps(mat, None, pbr.image(f"{name}_orm", maps["orm"], True), pbr.image(f"{name}_normal", maps["normal"], True))
+    return mat
+
+
+def _placeholder(key):
+    name, color, metal, rough = LIBRARY[key]
+    return material(name, color, metal, rough)
 
 
 def _skyline():
@@ -50,25 +89,18 @@ def _sign():
 
 
 MAT_DEFS = {
-    "roof": lambda: material("Roof_Tar", (1, 1, 1), 0.0, 0.92, base_tex=image("Roof", roof_texture)),
-    "concrete": lambda: material("Concrete", (0.44, 0.43, 0.4), 0.0, 0.85),
     "concrete_dark": lambda: material("Concrete_Dark", (0.17, 0.17, 0.17), 0.0, 0.9),
-    "metal": lambda: material("Metal_Panel", (0.3, 0.32, 0.35), 0.7, 0.42),
     "metal_dark": lambda: material("Metal_Dark", (0.055, 0.06, 0.065), 0.75, 0.5),
     "metal_roof": lambda: material("Metal_Roof", (0.34, 0.36, 0.39), 0.65, 0.45),
     "glass_dark": lambda: material("Glass_Dark", (0.02, 0.03, 0.04), 0.9, 0.12),
-    "foliage": lambda: material("Foliage", (0.055, 0.15, 0.04), 0.0, 0.9),
-    "bark": lambda: material("Bark", (0.16, 0.1, 0.06), 0.0, 0.9),
+    "foliage": lambda: material("Foliage_Hedge", (0.055, 0.15, 0.04), 0.0, 0.9),
     "beacon": lambda: material("Beacon_Red", (1.0, 0.1, 0.05), 0.0, 0.4, (1.0, 0.05, 0.02), 12.0),
     "lamp": lambda: material("Lamp_Warm", (1.0, 0.85, 0.6), 0.0, 0.4, (1.0, 0.76, 0.42), 3.5),
     "helipad": lambda: material("Helipad", (1, 1, 1), 0.0, 0.8, base_tex=image("Helipad", helipad_texture)),
-    "road": lambda: material("Road", (1, 1, 1), 0.0, 0.88, base_tex=image("Road", road_texture)),
-    "junction": lambda: material("Junction", (1, 1, 1), 0.0, 0.88,
-                                 base_tex=image("Junction", intersection_texture)),
-    "sidewalk": lambda: material("Sidewalk", (1, 1, 1), 0.0, 0.85, base_tex=image(
-        "Sidewalk", lambda: paving_texture(71, 32, (0.52, 0.51, 0.49)))),
-    "paving": lambda: material("Paving", (1, 1, 1), 0.0, 0.8, base_tex=image(
-        "Paving", lambda: paving_texture(72, 64, (0.56, 0.52, 0.47), 0.7, 256, 0.18))),
+    "road": lambda: _surface("Road", road_set()),
+    "junction": lambda: _surface("Junction", junction_set()),
+    "sidewalk": lambda: _surface("Sidewalk", paving_set(71, 64, (0.52, 0.51, 0.49))),
+    "paving": lambda: _surface("Paving", paving_set(72, 128, (0.56, 0.52, 0.47), 0.7, 512, 0.18)),
     "curb": lambda: material("Curb", (0.55, 0.54, 0.52), 0.0, 0.8),
     "paint": lambda: material("Car_Paint", (0.8, 0.8, 0.8), 0.55, 0.32),
     "tire": lambda: material("Tire", (0.02, 0.02, 0.02), 0.0, 0.85),
@@ -80,21 +112,40 @@ MAT_DEFS = {
     "skyline": _skyline,
     "sign": _sign,
 }
-for _style in FACADE_PBR:
-    MAT_DEFS[_style] = (lambda st: (lambda: _facade(st)))(_style)
-
-
 class Mats(dict):
-    """Materials are created on first use so each export only carries what it needs."""
+    """Materials are created on first use so each export only carries what it needs.
+
+    Library keys resolve to untextured placeholders unless ``textured`` (the library export itself,
+    or standalone assets such as the destructibles that are not remapped at runtime).
+    """
+
+    def __init__(self, textured=False):
+        super().__init__()
+        self.textured = textured
 
     def __missing__(self, key):
-        mat = MAT_DEFS[key]()
+        if key in LIBRARY:
+            mat = _library(key) if self.textured else _placeholder(key)
+        else:
+            mat = MAT_DEFS[key]()
         self[key] = mat
         return mat
 
 
-def city_mats():
-    return Mats()
+def city_mats(textured=False):
+    return Mats(textured)
+
+
+def build_material_library():
+    """city_materials.glb: one small swatch mesh per shared material."""
+    reset_scene()
+    M = city_mats(True)
+    root = empty("CityMaterials")
+    for i, key in enumerate(LIBRARY):
+        swatch = box(f"Swatch_{LIBRARY[key][0]}", (1, 1, 1), (i * 1.5, 0, 0), M[key])
+        box_uv(swatch, 1.0)
+        parent_keep(swatch, root)
+    export("city_materials.glb")
 
 
 # --------------------------------------------------------------------------- helpers
@@ -172,8 +223,18 @@ class Bld:
             self.add(cylinder("vent", 0.45, 1.0, (x, y, z + 0.5), self.M["metal"], segments=10),
                      cylinder("vent_cap", 0.7, 0.35, (x, y, z + 1.15), self.M["metal_dark"], r2=0.2, segments=10))
 
+    def storefront(self, pts, z1=5.6, out=0.25):
+        """Ground-floor retail band wrapped around the footprint (library 'Storefront' material)."""
+        self.parts.append(prism("storefront", offset_poly(pts, out), 0.0, z1, [self.M["storefront"], self.M["concrete"]],
+                                uv_scale=(32.0, 5.6)))
+
     def finish(self):
         root = empty(self.name)
+        for o in self.parts:
+            if not o.data.uv_layers:
+                names = [m.name for m in o.data.materials if m]
+                tile = next((UV_TILE[k] for k in UV_TILE if LIBRARY[k][0] in names), 4.0)
+                box_uv(o, tile)
         render = join(self.parts, "Render")
         parent_keep(render, root)
         for i, (kind, c, half, rot) in enumerate(self.cols):
@@ -194,6 +255,7 @@ def b01(M):
         b.mass(rect(w, w), z0, z1, "office")
         b.ledge(rect(w, w), z1 - 0.2, 0.9, 0.5)
         b.parapet(rect(w + 1.0, w + 1.0), z1 + 0.7, 1.0, 0.35)
+    b.storefront(rect(32, 32))
     for sx in (-1, 1):
         for sy in (-1, 1):
             b.add(box("pilaster", (1.4, 1.4, 42), (sx * 16, sy * 16, 21), M["concrete"]))
@@ -213,6 +275,7 @@ def b02(M):
     """Glass slab with vertical fins and an open crown frame (~93 m)."""
     b = Bld("building_02", M)
     b.mass(rect(36, 24), 0, 8, "glass", "roof")
+    b.storefront(rect(36, 24), 5.6, 0.2)
     b.mass(rect(34, 22), 8, 84, "glass")
     b.ledge(rect(36, 24), 8, 0.6, 0.3, "metal")
     for i in range(9):
@@ -240,6 +303,7 @@ def b03(M):
     poly = regular_polygon(15, 20)
     b.parts.append(prism("drum", poly, 0, 96, [M["band"], M["roof"]], uv_scale=FACADE_SPAN, sharp=30))
     b.cyl_col(0, 0, 0, 15.0, 96)
+    b.storefront(poly)
     for z in (24, 48, 72):
         b.parts.append(prism("ring", offset_poly(poly, 0.8), z - 0.35, z + 0.35, [M["concrete"], M["concrete"]], sharp=30))
     b.add(parapet(poly, 96, 1.1, 0.35, M["concrete"]))
@@ -266,8 +330,8 @@ def b04(M):
     b.parts.append(prism("mass", L, 0, 36, [M["brick"], M["roof"]], uv_scale=FACADE_SPAN))
     b.box_col(0, -8, 0, 34, 18, 36)
     b.box_col(-8, 9, 0, 18, 16, 36)
-    b.parts.append(prism("storefront", offset_poly(L, 0.12), 0.2, 4.2, [M["glass_dark"], M["concrete"]]))
-    b.ledge(L, 4.2, 0.5, 0.35)
+    b.storefront(L)
+    b.ledge(L, 5.6, 0.5, 0.45)
     b.ledge(L, 33.6, 0.6, 0.5)
     b.parapet(L, 36, 1.2, 0.4)
     b.add(box("stair", (5, 4, 3.5), (-10, 10, 37.75), M["concrete"]))
@@ -284,6 +348,7 @@ def b05(M):
     """Twin towers on a shared podium joined by a skybridge (~75 m)."""
     b = Bld("building_05", M)
     b.mass(rect(34, 24), 0, 14, "office")
+    b.storefront(rect(34, 24))
     b.parapet(rect(34, 24), 14, 1.0, 0.35)
     b.mass(rect(14, 14, -9, 0), 14, 74, "glass")
     b.mass(rect(14, 14, 9, 0), 14, 62, "glass")
@@ -308,6 +373,7 @@ def b06(M):
     """Stepped ziggurat with planted terraces (~51 m)."""
     b = Bld("building_06", M)
     tiers = [(34, 0, 12), (28, 12, 24), (22, 24, 36), (16, 36, 48)]
+    b.storefront(rect(34, 34))
     for i, (w, z0, z1) in enumerate(tiers):
         b.mass(rect(w, w), z0, z1, "band")
         b.parapet(rect(w, w), z1, 0.9, 0.35)
@@ -332,6 +398,7 @@ def b07(M):
     poly = chamfered_rect(26, 26, 3.0)
     b.parts.append(prism("mass", poly, 0, 118, [M["glass"], M["roof"]], uv_scale=FACADE_SPAN))
     b.box_col(0, 0, 0, 26, 26, 118)
+    b.storefront(poly)
     for z in (40, 80):
         b.ledge(poly, z, 0.9, 0.6, "metal")
     top = chamfered_rect(15, 15, 2.0)
@@ -371,14 +438,13 @@ def b09(M):
     """Residential slab with continuous balconies (~52 m)."""
     b = Bld("building_09", M)
     b.mass(rect(30, 18), 0, 48, "residential")
+    b.storefront(rect(30, 18))
     for k in range(11):
         z = 7.0 + 3.5 * k
         for x in (-10, 0, 10):
             for sy in (-1, 1):
                 b.add(box("slab", (5.0, 1.5, 0.25), (x, sy * 9.75, z), M["concrete"]),
-                      box("rail", (5.0, 0.06, 1.0), (x, sy * 10.47, z + 0.6), M["metal_dark"]),
-                      box("rail", (0.06, 1.5, 1.0), (x - 2.47, sy * 9.75, z + 0.6), M["metal_dark"]),
-                      box("rail", (0.06, 1.5, 1.0), (x + 2.47, sy * 9.75, z + 0.6), M["metal_dark"]))
+                      box("rail", (5.0, 0.06, 1.0), (x, sy * 10.47, z + 0.6), M["metal_dark"]))
     for sy in (-1, 1):
         b.box_col(0, sy * 9.75, 6.8, 30, 1.5, 36.4)
     b.parapet(rect(30, 18), 48, 1.1, 0.35)
@@ -461,19 +527,35 @@ def plaza(M):
 
 def prop(name, objs, filename):
     root = empty(name)
+    for o in objs:
+        if not o.data.uv_layers:
+            box_uv(o, 2.0)
     parent_keep(join(objs, f"{name}_Mesh"), root)
     export(filename)
+
+
+def strut(name, a, b, t, mat):
+    """Thin rectangular bar between two points (pillars, braces, rails)."""
+    pts = []
+    for p in (a, b):
+        for dx in (-t, t):
+            for dz in (-t, t):
+                pts.append((p[0] + dx, p[1], p[2] + dz))
+    return hull(name, pts, mat)
 
 
 def street_lamp():
     reset_scene()
     M = city_mats()
+    dark = M["metal_dark"]
     objs = [
-        box("base", (0.5, 0.5, 0.6), (0, 0, 0.3), M["metal_dark"], bevel=0.04),
-        cylinder("pole", 0.11, 7.0, (0, 0, 3.8), M["metal_dark"], r2=0.07, segments=10),
-        box("arm", (2.4, 0.12, 0.12), (-1.1, 0, 7.25), M["metal_dark"], rot=(0, -6, 0)),
-        box("head", (0.9, 0.36, 0.16), (-2.2, 0, 7.12), M["metal_dark"], bevel=0.03),
-        box("light", (0.7, 0.26, 0.04), (-2.2, 0, 7.03), M["lamp"]),
+        cylinder("base", 0.24, 0.9, (0, 0, 0.45), dark, segments=8, r2=0.17),
+        box("door", (0.14, 0.03, 0.4), (0.0, -0.2, 0.5), M["metal"]),
+        cylinder("pole", 0.11, 6.6, (0, 0, 4.2), dark, segments=8, r2=0.075),
+        sweep("arm", [(0, 0, 7.3), (0, 0, 7.55), (-0.25, 0, 7.8), (-0.8, 0, 7.92), (-1.75, 0, 7.82)], 0.055, dark, 6),
+        hull("head", [(-1.7, -0.19, 7.78), (-2.75, -0.17, 7.72), (-1.7, 0.19, 7.78), (-2.75, 0.17, 7.72),
+                      (-1.75, -0.14, 7.9), (-2.68, -0.12, 7.84), (-1.75, 0.14, 7.9), (-2.68, 0.12, 7.84)], dark),
+        box("light", (0.82, 0.26, 0.03), (-2.22, 0, 7.735), M["lamp"], rot=(0, -3.3, 0)),
     ]
     prop("StreetLamp", objs, "street_lamp.glb")
 
@@ -481,23 +563,31 @@ def street_lamp():
 def car():
     reset_scene()
     M = city_mats()
+    paint, dark, glass = M["paint"], M["metal_dark"], M["glass_dark"]
     objs = [
-        loft("body", [(-2.25, 0, 0.58, 1.66, 0.46, 0.14), (-1.7, 0, 0.62, 1.8, 0.66, 0.18),
-                      (1.6, 0, 0.64, 1.8, 0.7, 0.18), (2.25, 0, 0.66, 1.7, 0.5, 0.14)], M["paint"], axis="Y",
-             bevel=0.04),
-        hull("cabin", [(-0.78, -0.95, 0.96), (0.78, -0.95, 0.96), (-0.78, 1.25, 0.98), (0.78, 1.25, 0.98),
-                       (-0.64, -0.35, 1.44), (0.64, -0.35, 1.44), (-0.64, 0.75, 1.44), (0.64, 0.75, 1.44)],
-             M["glass_dark"]),
-        loft("roof", [(-0.3, 0, 1.455, 1.26, 0.04, 0.05), (0.7, 0, 1.455, 1.26, 0.04, 0.05)], M["paint"], axis="Y"),
-        box("bumper_f", (1.7, 0.18, 0.2), (0, -2.28, 0.42), M["metal_dark"]),
-        box("bumper_r", (1.7, 0.18, 0.2), (0, 2.3, 0.44), M["metal_dark"]),
+        rloft("body", [(-2.3, 0, 0.56, 1.6, 0.4, 3.2), (-2.08, 0, 0.62, 1.76, 0.58, 3.6), (-1.3, 0, 0.66, 1.82, 0.7, 3.8),
+                       (1.3, 0, 0.67, 1.82, 0.72, 3.8), (2.08, 0, 0.66, 1.76, 0.62, 3.6), (2.32, 0, 0.66, 1.62, 0.44, 3.2)],
+              paint, axis="Y", n=16),
+        hull("cabin", [(-0.8, -0.95, 0.98), (0.8, -0.95, 0.98), (-0.8, 1.25, 1.0), (0.8, 1.25, 1.0),
+                       (-0.66, -0.3, 1.44), (0.66, -0.3, 1.44), (-0.66, 0.78, 1.44), (0.66, 0.78, 1.44)], glass),
+        hull("roof", [(-0.675, -0.3, 1.43), (0.675, -0.3, 1.43), (-0.675, 0.78, 1.43), (0.675, 0.78, 1.43),
+                      (-0.62, -0.24, 1.47), (0.62, -0.24, 1.47), (-0.62, 0.72, 1.47), (0.62, 0.72, 1.47)], paint),
+        box("grille", (1.0, 0.05, 0.2), (0, -2.31, 0.6), dark),
+        rloft("bumper_f", [(-2.42, 0, 0.42, 1.72, 0.2, 3.0), (-2.2, 0, 0.42, 1.76, 0.22, 3.0)], dark, axis="Y", n=12),
+        rloft("bumper_r", [(2.2, 0, 0.44, 1.76, 0.22, 3.0), (2.44, 0, 0.44, 1.72, 0.2, 3.0)], dark, axis="Y", n=12),
+        box("plate_f", (0.5, 0.03, 0.12), (0, -2.43, 0.44), M["white"]),
+        box("plate_r", (0.5, 0.03, 0.12), (0, 2.45, 0.5), M["white"]),
     ]
-    for sx in (-1, 1):
+    for s in (1, -1):
+        objs.append(strut("a_pillar", (s * 0.77, -0.93, 0.99), (s * 0.64, -0.3, 1.44), 0.035, paint))
+        objs.append(strut("b_pillar", (s * 0.75, 0.25, 1.0), (s * 0.66, 0.25, 1.44), 0.04, paint))
+        objs.append(strut("c_pillar", (s * 0.77, 1.22, 1.0), (s * 0.64, 0.77, 1.44), 0.04, paint))
+        objs.append(box("mirror", (0.12, 0.08, 0.1), (s * 0.95, -0.78, 1.02), paint))
+        objs.append(box("headlight", (0.36, 0.05, 0.12), (s * 0.6, -2.3, 0.74), M["headlight"], rot=(0, 0, s * -8)))
+        objs.append(box("taillight", (0.38, 0.05, 0.1), (s * 0.6, 2.33, 0.78), M["taillight"], rot=(0, 0, s * 8)))
         for sy in (-1, 1):
-            objs.append(cylinder("wheel", 0.34, 0.24, (sx * 0.8, sy * 1.38, 0.34), M["tire"], (0, 90, 0), 10))
-            objs.append(cylinder("hub", 0.2, 0.26, (sx * 0.8, sy * 1.38, 0.34), M["chrome"], (0, 90, 0), 8))
-        objs.append(box("headlight", (0.38, 0.06, 0.12), (sx * 0.58, -2.26, 0.68), M["headlight"]))
-        objs.append(box("taillight", (0.4, 0.06, 0.1), (sx * 0.6, 2.27, 0.72), M["taillight"]))
+            objs.append(cylinder("tire", 0.34, 0.24, (s * 0.8, sy * 1.38, 0.34), M["tire"], (0, 90, 0), 10))
+            objs.append(cylinder("hub", 0.2, 0.25, (s * 0.8, sy * 1.38, 0.34), M["chrome"], (0, 90, 0), 8))
     prop("Car", objs, "car.glb")
 
 
@@ -516,28 +606,39 @@ def barrier():
 def rooftop_hvac():
     reset_scene()
     M = city_mats()
+    dark = M["metal_dark"]
     objs = [
-        box("frame", (3.2, 2.2, 0.25), (0, 0, 0.125), M["metal_dark"]),
-        box("unit", (3.0, 2.0, 1.5), (0, 0, 1.0), M["metal"], bevel=0.05),
+        box("skid", (3.2, 2.2, 0.22), (0, 0, 0.11), dark),
+        box("unit", (3.0, 2.0, 1.5), (0, 0, 0.97), M["metal"], bevel=0.04),
+        box("coil", (0.04, 1.8, 1.1), (1.52, 0, 0.9), dark),
+        box("panel", (0.6, 0.04, 0.9), (-0.8, -1.02, 0.95), M["metal"], bevel=0.01),
+        box("ebox", (0.4, 0.25, 0.5), (-1.2, 1.12, 0.8), dark),
     ]
     for x in (-0.75, 0.75):
-        objs.append(tube("fan_ring", 0.62, 0.52, 0.18, (x, 0, 1.82), M["metal_dark"], segments=12))
-        objs.append(cylinder("fan", 0.52, 0.04, (x, 0, 1.76), M["concrete_dark"], segments=12))
-    for i in range(6):
-        objs.append(box("louver", (0.04, 1.8, 0.08), (1.52, 0, 0.5 + i * 0.18), M["metal_dark"]))
-    objs.append(cylinder("duct", 0.25, 1.6, (-1.9, 0.5, 0.8), M["metal"], (0, 90, 0), 10))
+        objs.append(tube("fan_ring", 0.62, 0.54, 0.24, (x, 0, 1.84), dark, segments=12))
+        objs.append(cylinder("fan_hub", 0.12, 0.12, (x, 0, 1.8), dark, segments=6))
+        for k in range(3):
+            objs.append(box("fan_blade", (0.95, 0.14, 0.015), (x, 0, 1.79), M["metal"], rot=(12, 0, 60 * k)))
+        for dy in (-0.2, 0.2):
+            objs.append(box("grille", (1.16, 0.025, 0.025), (x, dy, 1.96), dark))
+    for i in range(5):
+        objs.append(box("louver", (0.05, 1.8, 0.07), (1.56, 0, 0.5 + i * 0.2), dark, rot=(0, 30, 0)))
+    objs.append(sweep("pipe", [(-1.5, 0.5, 0.6), (-1.75, 0.5, 0.6), (-1.95, 0.5, 0.4), (-1.95, 0.5, 0.1)], 0.09, M["metal"], 6))
     prop("RooftopHVAC", objs, "rooftop_hvac.glb")
 
 
 def rooftop_vent():
     reset_scene()
     M = city_mats()
+    dark = M["metal_dark"]
     objs = [
-        box("pad", (1.8, 1.8, 0.2), (0, 0, 0.1), M["concrete_dark"]),
+        box("pad", (1.8, 1.8, 0.2), (0, 0, 0.1), M["concrete"]),
         cylinder("stack", 0.4, 1.8, (0.3, 0.2, 1.1), M["metal"], segments=12),
-        cylinder("cap", 0.6, 0.35, (0.3, 0.2, 2.1), M["metal_dark"], r2=0.15, segments=12),
+        tube("flange", 0.46, 0.38, 0.08, (0.3, 0.2, 0.24), dark, segments=12),
+        lathe("cap", [(0.0, 0.42), (0.3, 0.36), (0.62, 0.12), (0.64, 0.06), (0.42, 0.08), (0.0, 0.12)], 12, (0.3, 0.2, 1.9),
+              dark),
         box("box", (0.8, 0.6, 0.7), (-0.4, -0.4, 0.55), M["metal"], bevel=0.03),
-        cylinder("pipe", 0.12, 1.2, (-0.4, 0.2, 0.9), M["metal_dark"], (90, 0, 0), 8),
+        sweep("pipe", [(-0.4, -0.1, 0.7), (-0.4, 0.2, 0.85), (-0.1, 0.2, 1.0)], 0.1, dark, 8),
     ]
     prop("RooftopVent", objs, "rooftop_vent.glb")
 
@@ -545,53 +646,101 @@ def rooftop_vent():
 def antenna():
     reset_scene()
     M = city_mats()
-    objs = [box("base", (1.6, 1.6, 0.4), (0, 0, 0.2), M["concrete_dark"])]
+    dark = M["metal_dark"]
+    objs = [box("base", (1.6, 1.6, 0.4), (0, 0, 0.2), M["concrete"])]
     r = 0.45
     legs = [(r * math.cos(a), r * math.sin(a)) for a in (0.0, 2.094, 4.189)]
     height = 13.0
     for x, y in legs:
-        objs.append(cylinder("leg", 0.06, height, (x, y, 0.4 + height / 2), M["metal_dark"], segments=6))
+        objs.append(cylinder("leg", 0.06, height, (x, y, 0.4 + height / 2), dark, segments=6))
     for k in range(8):
         z = 1.2 + k * 1.5
         for i in range(3):
             (x0, y0), (x1, y1) = legs[i], legs[(i + 1) % 3]
             length = math.hypot(x1 - x0, y1 - y0)
             ang = math.degrees(math.atan2(y1 - y0, x1 - x0))
-            objs.append(box("brace", (length, 0.05, 0.05), ((x0 + x1) / 2, (y0 + y1) / 2, z), M["metal_dark"],
-                            rot=(0, 0, ang)))
-    objs.append(cylinder("dish", 0.9, 0.35, (0.8, 0, 8.5), M["metal"], (0, 70, 0), 16, r2=0.25))
+            objs.append(box("brace", (length, 0.05, 0.05), ((x0 + x1) / 2, (y0 + y1) / 2, z), dark, rot=(0, 0, ang)))
+            if k % 2 == 0:
+                objs.append(box("diag", (length * 1.18, 0.035, 0.035), ((x0 + x1) / 2, (y0 + y1) / 2, z + 0.75), dark,
+                                rot=(0, 45, ang)))
+    objs.append(lathe("dish", [(0.0, 0.0), (0.4, 0.05), (0.75, 0.18), (0.9, 0.28), (0.86, 0.3), (0.72, 0.22), (0.38, 0.1),
+                               (0.0, 0.05)], 20, (0.75, 0, 8.5), M["metal"], (0, -70, 0)))
+    objs.append(cylinder("feed", 0.03, 0.8, (1.05, 0, 8.6), dark, (0, -70, 0), 6))
+    for z, a in ((5.5, 0), (10.0, 120)):
+        objs.append(box("panel_antenna", (0.3, 0.12, 1.4), (0.5 * math.cos(math.radians(a)), 0.5 * math.sin(math.radians(a)), z),
+                        M["white"], rot=(0, 0, a)))
     objs.append(cylinder("mast", 0.05, 3.0, (0, 0, height + 1.9), M["metal"], segments=6))
     objs.append(icosphere("beacon", 0.22, (0, 0, height + 3.5), M["beacon"]))
     prop("Antenna", objs, "antenna.glb")
 
 
+def blob(name, r, loc, mat, rng, subdiv=2, scale=(1, 1, 1), amp=0.18):
+    """Lumpy icosphere for foliage clumps (deterministic vertex jitter along the normals)."""
+    import bmesh
+    o = icosphere(name, r, loc, mat, subdiv, scale, smooth=True)
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    bm.normal_update()
+    c = sum((v.co for v in bm.verts), __import__("mathutils").Vector()) / len(bm.verts)
+    for v in bm.verts:
+        d = (v.co - c).normalized()
+        v.co += d * r * amp * (rng.random() * 2 - 1)
+    bm.to_mesh(o.data)
+    bm.free()
+    return o
+
+
 def tree():
+    import random
     reset_scene()
     M = city_mats()
-    objs = [
-        cylinder("trunk", 0.2, 3.2, (0, 0, 1.6), M["bark"], r2=0.12, segments=8),
-        icosphere("canopy", 1.7, (0, 0, 3.9), M["foliage"], scale=(1, 1, 0.85)),
-        icosphere("canopy", 1.3, (0.8, 0.4, 4.7), M["foliage"], scale=(1, 1, 0.9)),
-        icosphere("canopy", 1.1, (-0.6, -0.4, 5.0), M["foliage"]),
-    ]
+    rng = random.Random(7)
+    fmaps, bmaps = facades.foliage_set(), facades.bark_set()
+    leaves = material("Foliage", (1, 1, 1), 0.0, 0.8, base_tex=pbr.image("Foliage_albedo", fmaps["albedo"]))
+    pbr.attach_maps(leaves, None, pbr.image("Foliage_orm", fmaps["orm"], True), pbr.image("Foliage_normal", fmaps["normal"], True))
+    bark = material("Bark", (1, 1, 1), 0.0, 0.9, base_tex=pbr.image("Bark_albedo", bmaps["albedo"]))
+    pbr.attach_maps(bark, None, pbr.image("Bark_orm", bmaps["orm"], True), pbr.image("Bark_normal", bmaps["normal"], True))
+    objs = [cylinder("trunk", 0.2, 3.2, (0, 0, 1.6), bark, r2=0.12, segments=8)]
+    for a, h, L in ((0.3, 2.6, 1.3), (2.4, 2.9, 1.1), (4.3, 3.1, 1.0)):
+        tip = (math.cos(a) * L, math.sin(a) * L, h + 0.9)
+        objs.append(sweep("branch", [(0, 0, h - 0.4), (math.cos(a) * L * 0.5, math.sin(a) * L * 0.5, h + 0.4), tip],
+                          lambda u: 0.1 - 0.06 * u, bark, 6))
+    for (x, y, z, r) in ((0, 0, 4.1, 1.7), (0.9, 0.4, 4.7, 1.25), (-0.8, -0.5, 4.9, 1.15), (0.3, -0.9, 4.3, 1.1),
+                         (-0.4, 0.8, 5.3, 1.0)):
+        objs.append(blob("canopy", r, (x, y, z), leaves, rng, 2, (1, 1, 0.85)))
+    for o in objs:
+        box_uv(o, 1.5)
     prop("Tree", objs, "tree.glb")
 
 
 def skyline():
-    """Low-detail silhouettes for the distant horizon ring."""
+    """Low-detail silhouettes for the distant horizon ring (instanced with random scale)."""
     reset_scene()
     M = city_mats()
     root = empty("Skyline")
     sk = M["skyline"]
+    span = (32.0, 28.0)
+
+    def mass(name, pts, z0, z1):
+        return prism(name, pts, z0, z1, [sk, sk], uv_scale=span)
+
     variants = [
-        [prism("s0", rect(30, 20), 0, 90, [sk, sk], uv_scale=(16, 16))],
-        [prism("s1a", rect(22, 22), 0, 120, [sk, sk], uv_scale=(16, 16)),
-         prism("s1b", rect(14, 14), 120, 150, [sk, sk], uv_scale=(16, 16))],
-        [prism("s2", regular_polygon(12, 12), 0, 110, [sk, sk], uv_scale=(16, 16))],
-        [prism("s3a", rect(40, 40), 0, 45, [sk, sk], uv_scale=(16, 16)),
-         prism("s3b", rect(20, 30, -8, 0), 45, 70, [sk, sk], uv_scale=(16, 16))],
+        [mass("s0a", rect(30, 20), 0, 90), mass("s0b", rect(22, 14), 90, 104)],
+        [mass("s1a", rect(22, 22), 0, 120), mass("s1b", rect(16, 16), 120, 145), mass("s1c", rect(10, 10), 145, 158),
+         cylinder("s1d", 0.9, 40, (0, 0, 178), sk, segments=6, r2=0.15)],
+        [mass("s2a", regular_polygon(12, 12), 0, 110), mass("s2b", regular_polygon(10.5, 12), 110, 118)],
+        [mass("s3a", rect(40, 40), 0, 45), mass("s3b", rect(20, 30, -8, 0), 45, 70)],
+        [mass("s4a", rect(14, 14, -10, 0), 0, 130), mass("s4b", rect(14, 14, 10, 0), 0, 112)],
+        [mass("s5a", rect(26, 26), 0, 80), mass("s5b", rect(20, 20), 80, 92), mass("s5c", rect(14, 14), 92, 102),
+         mass("s5d", rect(8, 8), 102, 110)],
+        [hull("s6", [(-13, -13, 0), (13, -13, 0), (13, 13, 0), (-13, 13, 0), (-13, -13, 140), (13, -13, 116),
+                     (13, 13, 116), (-13, 13, 140)], sk)],
+        [mass("s7a", chamfered_rect(24, 24, 4), 0, 150), cylinder("s7b", 0.5, 45, (0, 0, 172), sk, segments=6)],
     ]
     for i, parts in enumerate(variants):
+        for o in parts:
+            if not o.data.uv_layers:
+                box_uv(o, 32.0, 28.0)
         parent_keep(join(parts, f"Skyline_{i}"), root)
     export("skyline.glb")
 
@@ -603,6 +752,7 @@ def build_buildings():
 
 
 def build():
+    build_material_library()
     build_buildings()
     road(None)
     intersection(None)

@@ -270,19 +270,24 @@ def house_wall_texture():
 
 
 def skyline_texture():
+    """Distant tower cladding, one tile = 32 m x 28 m (8 bays x 8 floors) like the near facades."""
     rng = _rng(61)
     s = 256
+    cell = s // 8
     base = np.empty((s, s, 3), np.float32)
-    base[:] = _c((0.07, 0.08, 0.1)) * (0.8 + 0.4 * fbm(rng, s, s, 4, 3)[..., None])
+    base[:] = _c((0.085, 0.09, 0.105)) * (0.85 + 0.3 * fbm(rng, s, s, 4, 3)[..., None])
     emit = np.zeros((s, s, 3), np.float32)
-    for r in range(32):
-        for c in range(16):
-            y0, x0 = r * 8 + 2, c * 16 + 3
-            lit = rng.random() < 0.3
-            col = _c(LIGHTS["mixed"][rng.integers(3)]) * rng.uniform(0.5, 1.0) if lit else _c((0.1, 0.12, 0.15))
-            base[y0:y0 + 5, x0:x0 + 10] = col * (0.8 if lit else 1.0)
+    for r in range(8):
+        lit_floor = rng.random() < 0.5
+        for c in range(8):
+            y0, x0 = r * cell + 11, c * cell + 4
+            lit = rng.random() < (0.35 if lit_floor else 0.12)
+            col = _c(LIGHTS["mixed"][rng.integers(3)]) * rng.uniform(0.45, 0.9)
+            glass = _c((0.13, 0.16, 0.2)) * rng.uniform(0.8, 1.2)
+            base[y0:y0 + 18, x0:x0 + 24] = col * 0.8 if lit else glass
             if lit:
-                emit[y0:y0 + 5, x0:x0 + 10] = col
+                emit[y0:y0 + 18, x0:x0 + 24] = col
+        base[r * cell:r * cell + 2, :] *= 0.7  # floor slab line
     return base, emit
 
 
@@ -312,3 +317,128 @@ def facade_images(style):
         b, e = facade(style)
         _ARRAYS[f"Facade_{style}"], _ARRAYS[f"Facade_{style}_Emit"] = b, e
     return image(f"Facade_{style}", None), image(f"Facade_{style}_Emit", None)
+
+
+# ------------------------------------------------------------------ PBR street surfaces
+
+
+def _norm_orm(height, strength, ao, rough):
+    """Normal map + packed ORM from a height field (lazy import keeps this module bpy-free)."""
+    from pbr import normal_map
+    return normal_map(height.astype(np.float32), strength), np.dstack([ao, rough, np.zeros_like(ao)]).astype(np.float32)
+
+
+def _cracks(rng, h, w, count, steps, ppm):
+    mask = np.zeros((h, w), bool)
+    for _ in range(count):
+        y, x = rng.uniform(0, h), rng.uniform(0, w)
+        a = rng.uniform(0, 2 * np.pi)
+        for _ in range(steps):
+            a += rng.normal(0, 0.35)
+            y = (y + np.sin(a) * ppm * 0.08) % h
+            x = (x + np.cos(a) * ppm * 0.08) % w
+            mask[int(y), int(x)] = True
+            if rng.random() < 0.02:  # branch
+                a += rng.choice((-1, 1)) * 1.0
+    return mask
+
+
+def _asphalt_pbr(rng, h, w, ppm, tone=0.1):
+    img = asphalt(rng, h, w, tone)
+    agg = rng.random((h, w)).astype(np.float32)
+    height = 0.35 * agg + 0.5 * fbm(rng, h, w, 24, 2)
+    rough = np.full((h, w), 0.9, np.float32) - 0.06 * agg
+    crack = _cracks(rng, h, w, 26, 260, ppm)
+    height[crack] -= 1.2
+    img[crack] *= 0.45
+    # sealed crack repairs and patches
+    for _ in range(10):
+        py, px = rng.integers(0, h - 64), rng.integers(0, w - 64)
+        ph, pw = rng.integers(20, 64), rng.integers(20, 64)
+        img[py:py + ph, px:px + pw] *= rng.uniform(0.7, 0.85)
+        height[py:py + ph, px:px + pw] += 0.15
+        rough[py:py + ph, px:px + pw] -= 0.05
+    # oil / damp stains: darker and smoother
+    stain = np.clip((fbm(rng, h, w, 6, 3) - 0.6) * 4.0, 0, 1).astype(np.float32)
+    img *= (1.0 - 0.35 * stain)[..., None]
+    rough -= 0.45 * stain
+    return img, height, rough
+
+
+def road_set():
+    """14 m x 40 m carriageway: asphalt with cracks, patches, stains, wheel paths, a manhole, worn markings."""
+    rng = _rng(21)
+    h, w = 1024, 512
+    ppm_u, ppm_v = w / 14.0, h / 40.0
+    img, height, rough = _asphalt_pbr(rng, h, w, ppm_u)
+    u = (np.arange(w) + 0.5) / ppm_u - 7.0
+    v = (np.arange(h) + 0.5) / ppm_v
+    U, V = np.meshgrid(u, v)
+    for lane in (-5.25, -1.75, 1.75, 5.25):  # polished, darker wheel paths
+        track = np.exp(-((np.abs(U - lane) - 0.8) ** 2) / 0.05)
+        img *= (1.0 - 0.12 * track)[..., None]
+        rough -= 0.12 * track
+    edge = (np.abs(np.abs(U) - 6.6) < 0.09)
+    center = (np.abs(np.abs(U) - 0.14) < 0.07)
+    dash = (np.abs(np.abs(U) - 3.5) < 0.07) & ((V % 10.0) < 4.0)
+    paint = edge | dash | center
+    img = _paint(img, edge | dash, (0.85, 0.85, 0.8), rng)
+    img = _paint(img, center, (0.85, 0.62, 0.1), rng)
+    height = np.where(paint, height + 0.25, height)
+    rough = np.where(paint, 0.62, rough)
+    # manhole cover and curb drains
+    R = np.sqrt((U - 1.75) ** 2 + (V - 14.0) ** 2)
+    cover = R < 0.36
+    img = np.where(cover[..., None], _c((0.1, 0.1, 0.1)) * (0.8 + 0.4 * ((np.floor(U * 12) + np.floor(V * 12)) % 2))[..., None], img)
+    height = np.where(cover, 0.2 + 0.25 * ((np.floor(U * 12) + np.floor(V * 12)) % 2), height)
+    height = np.where(np.abs(R - 0.37) < 0.025, -0.5, height)
+    rough = np.where(cover, 0.5, rough)
+    for dv in (6.0, 26.0):
+        for side in (-1, 1):
+            drain = (np.abs(U - side * 6.35) < 0.3) & (np.abs(V - dv) < 0.45)
+            slots = drain & ((np.floor((V - dv) * 14) % 2) == 0)
+            img = np.where(drain[..., None], _c((0.06, 0.06, 0.06)), img)
+            height = np.where(drain, np.where(slots, -0.9, 0.1), height)
+    ao = np.clip(1.0 - np.clip(-height, 0, 2) * 0.3, 0.4, 1.0)
+    nrm, orm = _norm_orm(height, 1.8, ao, np.clip(rough, 0.25, 1.0))
+    return {"albedo": img.astype(np.float32), "normal": nrm, "orm": orm}
+
+
+def junction_set():
+    """20 m x 20 m junction with zebra crossings and stop lines on all approaches."""
+    rng = _rng(22)
+    s = 512
+    ppm = s / 20.0
+    img, height, rough = _asphalt_pbr(rng, s, s, ppm)
+    c = (np.arange(s) + 0.5) / ppm - 10.0
+    X, Y = np.meshgrid(c, c)
+    zebra_y = (np.abs(Y) > 7.4) & (np.abs(Y) < 9.8) & (np.abs(X) < 6.8) & (((X + 7.0) % 1.2) < 0.6)
+    zebra_x = (np.abs(X) > 7.4) & (np.abs(X) < 9.8) & (np.abs(Y) < 6.8) & (((Y + 7.0) % 1.2) < 0.6)
+    stop = ((np.abs(np.abs(Y) - 7.1) < 0.12) & (np.abs(X) < 6.8)) | ((np.abs(np.abs(X) - 7.1) < 0.12) & (np.abs(Y) < 6.8))
+    paint = zebra_x | zebra_y | stop
+    img = _paint(img, paint, (0.86, 0.86, 0.82), rng, 0.35)
+    height = np.where(paint, height + 0.25, height)
+    rough = np.where(paint, 0.62, rough)
+    ao = np.clip(1.0 - np.clip(-height, 0, 2) * 0.3, 0.4, 1.0)
+    nrm, orm = _norm_orm(height, 1.8, ao, np.clip(rough, 0.25, 1.0))
+    return {"albedo": img.astype(np.float32), "normal": nrm, "orm": orm}
+
+
+def paving_set(seed, tile_px, color, joint=0.55, size=512, jitter=0.12):
+    """Square paving slabs with recessed joints, per-slab tone, chipped corners and grime in the joints."""
+    rng = _rng(seed)
+    img = paving_texture(seed, tile_px, color, joint, size, jitter)
+    yy, xx = np.mgrid[0:size, 0:size]
+    dx = np.minimum(xx % tile_px, tile_px - 1 - xx % tile_px)
+    dy = np.minimum(yy % tile_px, tile_px - 1 - yy % tile_px)
+    d = np.minimum(dx, dy).astype(np.float32)
+    height = np.clip(d / 3.0, 0, 1) * 0.8 + 0.1 * rng.random((size, size))
+    tiles = size // tile_px
+    tilt = np.kron(rng.normal(0, 0.15, (tiles, tiles)), np.ones((tile_px, tile_px)))
+    height = height + tilt * (yy % tile_px) / tile_px
+    grime = np.clip(1.0 - d / 4.0, 0, 1)
+    img *= (1.0 - 0.25 * grime)[..., None]
+    rough = 0.82 + 0.1 * grime - 0.05 * rng.random((size, size))
+    ao = 0.6 + 0.4 * np.clip(d / 3.0, 0, 1)
+    nrm, orm = _norm_orm(height, 1.5, ao, rough)
+    return {"albedo": img.astype(np.float32), "normal": nrm, "orm": orm}
