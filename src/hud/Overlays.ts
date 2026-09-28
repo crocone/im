@@ -36,10 +36,10 @@ export class Overlays {
     this.add('menu', `<h1>ARMORED FLIGHT</h1><h2>Powered armor combat over a city under siege</h2>
       <p>Hostile drones, rooftop missile batteries and an armored behemoth have taken the skyline.
       Fly between the towers, lock on, and take the city back. Survive five waves.</p>
-      ${controlsHtml()}<button class="btn" data-a="start">Launch</button>`);
-    this.add('pause', `<h1>PAUSED</h1>${controlsHtml()}
-      <div><button class="btn" data-a="resume">Resume</button><button class="btn" data-a="restart">Restart</button></div>`);
-    this.add('help', `<h2>Controls</h2>${controlsHtml()}<button class="btn" data-a="resume">Back</button>`);
+      <button class="btn" data-a="start">Launch</button>${controlsHtml()}`);
+    this.add('pause', `<h1>PAUSED</h1>
+      <div><button class="btn" data-a="resume">Resume</button><button class="btn" data-a="restart">Restart</button></div>${controlsHtml()}`);
+    this.add('help', `<h2>Controls</h2><button class="btn" data-a="resume">Back</button>${controlsHtml()}`);
     this.add('defeat', `<h1>SUIT LOST</h1><h2>Mission failed</h2><div class="stats"></div>
       <button class="btn" data-a="restart">Redeploy</button>`);
     this.add('victory', `<h1>CITY SECURED</h1><h2>The behemoth is down</h2><div class="stats"></div>
