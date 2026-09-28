@@ -40,7 +40,7 @@ const SPECS: Record<MissileKind, Spec> = {
   enemy: {
     maxSpeed: 74, accel: 60, ignition: 0.1, guideStart: 0.3, guideBlend: 0.7, turnRate: 1.3, life: 9,
     proximity: 3, damage: 20, blast: 6, scale: 1.0, trailSpacing: 0.7, trailSize: 1.0, trailLife: 2.2,
-    colliderRadius: 0.6, membership: G.ENEMY_MISSILE, mask: G.WORLD | G.PLAYER | G.DEBRIS,
+    colliderRadius: 1.8, membership: G.ENEMY_MISSILE, mask: G.WORLD | G.PLAYER | G.DEBRIS,
   },
 };
 

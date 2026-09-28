@@ -25,9 +25,10 @@ export class Combat {
     const dPlayer = pos.distanceTo(player.position);
     cam.shake(clamp(p.scale * 0.45 * (1 - dPlayer / (140 * Math.sqrt(p.scale))), 0, 0.85));
 
+    const push = 10 + p.scale * 6;
     if (p.direct && p.damage > 0) {
       _dir.subVectors(pos, player.position).normalize();
-      p.direct.hit({ damage: p.damage, point: pos.clone(), dir: _dir.clone(), source: p.source, impulse: 0 });
+      p.direct.hit({ damage: p.damage, point: pos.clone(), dir: _dir.clone(), source: p.source, impulse: push });
     }
     const friendly = p.source === 'enemy';
     if (p.damage > 0 && !friendly) {
@@ -39,7 +40,7 @@ export class Combat {
         if (d > p.radius) continue;
         const falloff = 1 - Math.max(0, d) / p.radius;
         _dir.subVectors(e.position, pos).normalize();
-        e.hit({ damage: p.damage * 0.6 * falloff, point: pos.clone(), dir: _dir.clone(), source: p.source, impulse: 0 });
+        e.hit({ damage: p.damage * 0.6 * falloff, point: pos.clone(), dir: _dir.clone(), source: p.source, impulse: push * falloff });
       }
       // chain-detonate hostile missiles caught in the blast
       for (const m of this.ctx.missiles.incoming()) {

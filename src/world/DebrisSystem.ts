@@ -25,6 +25,11 @@ interface Pile {
   merged: THREE.Group | null;
 }
 
+/** Global cap on simultaneously simulated debris bodies (oldest chunks are frozen first). */
+export const MAX_ACTIVE_DEBRIS = TUNING.debris.maxActive;
+/** Seconds a chunk is simulated before it is frozen in place and its Rapier body removed. */
+export const DEBRIS_LIFETIME = TUNING.debris.lifetime;
+
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -84,7 +89,7 @@ export class DebrisSystem {
       this.active.push(chunk);
     }
     this.piles.push(pile);
-    while (this.active.length > TUNING.debris.maxActive) this.freeze(this.active[0]);
+    while (this.active.length > MAX_ACTIVE_DEBRIS) this.freeze(this.active[0]);
     while (this.piles.length > TUNING.debris.maxFrozenPiles) this.removePile(this.piles[0]);
   }
 
@@ -117,7 +122,7 @@ export class DebrisSystem {
       const r = c.body!.rotation();
       c.mesh.position.set(t.x, t.y, t.z);
       c.mesh.quaternion.set(r.x, r.y, r.z, r.w);
-      if (c.age > TUNING.debris.lifetime || t.y < -20 || (c.age > 1.5 && c.body!.isSleeping())) this.freeze(c);
+      if (c.age > DEBRIS_LIFETIME || t.y < -20 || (c.age > 1.5 && c.body!.isSleeping())) this.freeze(c);
     }
   }
 
