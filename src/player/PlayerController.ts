@@ -32,6 +32,7 @@ export class PlayerController implements Hittable {
   outOfBounds = false;
   onDestroyed: (() => void) | null = null;
   private energyIdle = 0;
+  private sinceHit = 99;
   private exhausted = false;
   private regenTimer = 0;
   private deathTimer = 0;
@@ -62,6 +63,7 @@ export class PlayerController implements Hittable {
     this.alive = true;
     this.exploded = false;
     this.notified = false;
+    this.sinceHit = 99;
     this.deathTimer = 0;
     this.exhausted = false;
     this.flight.vel.set(0, 0, 0);
@@ -137,6 +139,9 @@ export class PlayerController implements Hittable {
       this.energyIdle = 0;
     }
     this.energyIdle += dt;
+    // suit auto-repair: slowly patches armor back to 50 % after a few seconds out of fire
+    this.sinceHit += dt;
+    if (this.sinceHit > 5 && this.armor < 50) this.armor = Math.min(50, this.armor + 1.5 * dt);
     if (this.energyIdle > TUNING.energy.regenDelay)
       this.energy = Math.min(TUNING.energy.max, this.energy + TUNING.energy.regen * dt);
     this.regenTimer += dt;
@@ -213,6 +218,7 @@ export class PlayerController implements Hittable {
 
   hit(info: HitInfo) {
     if (!this.alive) return;
+    this.sinceHit = 0;
     this.armor = Math.max(0, this.armor - info.damage);
     this.ctx.fx.explosions.sparkBurst(info.point, info.dir.clone().negate(), 14, 16, SPARK);
     this.ctx.hud.damage(Math.min(1, info.damage / 25));

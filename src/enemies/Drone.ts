@@ -48,7 +48,7 @@ export class Drone extends Enemy {
     super(ctx, 60);
     this.radius = 1.4;
     this.lockTime = 0.95;
-    this.fireInterval = rand(1.7, 2.9) / aggression;
+    this.fireInterval = rand(2.1, 3.3) / aggression;
     const model = ctx.assets.clone('drone');
     model.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -99,11 +99,12 @@ export class Drone extends Enemy {
         if (_desired.length() > 36) _desired.setLength(36);
         this.fireTimer -= dt;
         if (this.fireTimer <= 0 && dist < 240 && player.alive) {
-          if (this.ctx.physics.lineOfSight(this.position, player.position)) {
+          // only a few drones may shoot at once so the swarm pressures without shredding the suit
+          if (this.ctx.physics.lineOfSight(this.position, player.position) && this.ctx.enemies.takeAttackSlot(this)) {
             this.setState('attack');
             this.burstLeft = 3;
             this.burstTimer = 0.35;
-          } else this.fireTimer = 0.6;
+          } else this.fireTimer = 0.5;
         }
         if (dist < 20) this.setState('reposition');
         else if (dist < 260 && Math.random() < dt * 0.45 && this.ctx.targeting.angleTo(this.position) < 0.07) this.startEvade();
@@ -119,6 +120,7 @@ export class Drone extends Enemy {
         }
         if (this.burstLeft === 0 && this.stateTime > 0.8) {
           this.fireTimer = this.fireInterval;
+          this.ctx.enemies.releaseAttackSlot(this);
           this.setState('orbit');
         }
         break;
@@ -150,6 +152,7 @@ export class Drone extends Enemy {
   }
 
   private startEvade() {
+    this.ctx.enemies.releaseAttackSlot(this);
     _v.subVectors(this.position, this.ctx.player.position).normalize();
     this.evadeDir.crossVectors(_v, UP).normalize().multiplyScalar(randSign());
     this.evadeDir.y = rand(-0.3, 0.5);
@@ -203,22 +206,25 @@ export class Drone extends Enemy {
     const muzzle = this.muzzles[this.muzzleIndex++ % 2].getWorldPosition(new THREE.Vector3());
     const tti = interceptTime(muzzle, player.position, player.flight.vel, BOLT_SPEED);
     const aim = _v.copy(player.position).addScaledVector(player.flight.vel, tti * 0.9);
-    const spread = (1.5 + dist * 0.018 + player.speed * 0.03) * this.accuracy;
+    const spread = (2 + dist * 0.022 + player.speed * 0.05) * this.accuracy;
     aim.x += rand(-spread, spread);
     aim.y += rand(-spread, spread) * 0.7;
     aim.z += rand(-spread, spread);
     const dir = aim.sub(muzzle).normalize();
-    this.ctx.bolts.fire(muzzle, dir.multiplyScalar(BOLT_SPEED), 6);
+    this.ctx.bolts.fire(muzzle, dir.multiplyScalar(BOLT_SPEED), 5);
     this.ctx.fx.muzzle(muzzle, 0.8, MUZZLE);
     this.ctx.audio.enemyShot(muzzle);
   }
 
-  protected onDamaged(_info: HitInfo) {
+  protected onDamaged(info: HitInfo) {
+    // repulsor / blast knockback
+    this.velocity.addScaledVector(info.dir, info.impulse * 0.9);
     if (this.alive && this.state !== 'evade' && Math.random() < 0.45) this.startEvade();
   }
 
   protected onDestroyed() {
     this.state = 'destroyed';
+    this.ctx.enemies.releaseAttackSlot(this);
     this.ctx.combat.explosion(this.position, { radius: 7, damage: 25, scale: 1.4, source: 'explosion', shockwave: false });
     this.ctx.score.kill(SCORE.drone, this.position, 'DRONE DOWN');
     this.removed = true;

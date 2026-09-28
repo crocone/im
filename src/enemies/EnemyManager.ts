@@ -17,12 +17,27 @@ export class EnemyManager {
   private readonly markers: MarkerInfo[] = [];
   private readonly markerOf = new Map<object, MarkerInfo>();
   private readonly turretAnchors: Anchor[] = [];
+  private readonly attackers = new Set<Enemy>();
 
   constructor(private readonly ctx: GameContext) {}
 
   /** Enemies that still count toward clearing the wave. */
   get hostiles() {
     return this.list.filter((e) => e.alive).length;
+  }
+
+  /** Limit how many drones fire at the same time (fairness / readability). */
+  takeAttackSlot(e: Enemy) {
+    const wave = this.ctx.waves.wave;
+    const max = this.boss ? 2 : wave <= 2 ? 2 : 3;
+    if (this.attackers.has(e)) return true;
+    if (this.attackers.size >= max) return false;
+    this.attackers.add(e);
+    return true;
+  }
+
+  releaseAttackSlot(e: Enemy) {
+    this.attackers.delete(e);
   }
 
   spawnDrone(pos: THREE.Vector3, aggression = 1) {
@@ -95,6 +110,7 @@ export class EnemyManager {
         e.dispose();
         this.list.splice(i, 1);
         this.markerOf.delete(e);
+        this.attackers.delete(e);
         if (e === this.boss) this.boss = null;
       }
     }
@@ -105,6 +121,7 @@ export class EnemyManager {
     this.list.length = 0;
     this.boss = null;
     this.markerOf.clear();
+    this.attackers.clear();
     for (const a of this.turretAnchors) a.used = false;
     this.turretAnchors.length = 0;
   }

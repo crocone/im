@@ -46,6 +46,17 @@ export class FxTextures {
     }
   });
 
+  /** soft, low-contrast puff for continuous missile trails */
+  readonly puff = canvasTexture(64, (ctx, s) => {
+    radial(ctx, s / 2, s / 2, s / 2, [[0, 'rgba(235,235,235,0.55)'], [0.45, 'rgba(225,225,225,0.35)'], [1, 'rgba(220,220,220,0)']]);
+    const rnd = seeded(11);
+    for (let i = 0; i < 10; i++) {
+      const a = rnd() * Math.PI * 2;
+      const d = rnd() * s * 0.16;
+      radial(ctx, s / 2 + Math.cos(a) * d, s / 2 + Math.sin(a) * d, s * (0.2 + rnd() * 0.12), [[0, 'rgba(255,255,255,0.12)'], [1, 'rgba(255,255,255,0)']]);
+    }
+  });
+
   readonly flare = canvasTexture(128, (ctx, s) => {
     radial(ctx, s / 2, s / 2, s / 2, [[0, 'rgba(255,255,255,1)'], [0.18, 'rgba(255,255,255,0.7)'], [0.5, 'rgba(255,255,255,0.12)'], [1, 'rgba(255,255,255,0)']]);
     ctx.globalCompositeOperation = 'lighter';

@@ -15,9 +15,9 @@ export interface ExplosionOptions {
 
 const _v = new THREE.Vector3();
 const _p = new THREE.Vector3();
-const FIRE_A = new THREE.Color(2.8, 1.4, 0.45);
+const FIRE_A = new THREE.Color(2.0, 0.95, 0.3);
 const FIRE_B = new THREE.Color(0.5, 0.1, 0.02);
-const FLASH = new THREE.Color(4, 3.2, 2.2);
+const FLASH = new THREE.Color(2.6, 2.0, 1.4);
 const SMOKE_A = new THREE.Color(0.2, 0.18, 0.17);
 const SMOKE_B = new THREE.Color(0.1, 0.095, 0.09);
 const SPARK = new THREE.Color(4, 2.4, 1.0);
@@ -42,8 +42,8 @@ export class ExplosionFx {
   spawn(pos: THREE.Vector3, opts: ExplosionOptions = {}) {
     const s = opts.scale ?? 1;
     const fireA = opts.tint ? _tint.copy(FIRE_A).multiply(opts.tint) : FIRE_A;
-    this.glow.emit({ pos, life: 0.22, size: 5 * s, size1: 16 * s, color: FLASH, alpha: 1, alpha1: 0 });
-    const fireballs = Math.round(10 + 8 * Math.sqrt(s));
+    this.glow.emit({ pos, life: 0.2, size: 3.5 * s, size1: 11 * s, color: FLASH, alpha: 1, alpha1: 0 });
+    const fireballs = Math.round(8 + 6 * Math.sqrt(s));
     for (let i = 0; i < fireballs; i++) {
       randomDir(_v);
       _p.copy(pos).addScaledVector(_v, rand(0, 1.2) * s);
@@ -51,11 +51,11 @@ export class ExplosionFx {
         pos: _p,
         vel: _v.clone().multiplyScalar(rand(4, 14) * s),
         life: rand(0.4, 0.85),
-        size: rand(2, 3.5) * s,
-        size1: rand(5, 8) * s,
+        size: rand(1.6, 2.8) * s,
+        size1: rand(4, 6.5) * s,
         color: fireA,
         color1: FIRE_B,
-        alpha: 1,
+        alpha: 0.85,
         alpha1: 0,
         drag: 3,
         gravity: -2,
@@ -85,7 +85,7 @@ export class ExplosionFx {
     if (opts.shockwave) {
       this.rings.emit({ pos, life: 0.45, size: 2 * s, size1: 34 * s, color: RING, alpha: 0.9, alpha1: 0 });
     }
-    if (opts.light !== false) this.lights.flash(pos, 0xffa25a, 2600 * s, 90 * Math.sqrt(s), 0.45);
+    if (opts.light !== false) this.lights.flash(pos, 0xffa25a, 1800 * s, 90 * Math.sqrt(s), 0.45);
   }
 
   /** Directional spark shower (impacts) or omni burst (normal = null). */

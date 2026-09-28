@@ -125,8 +125,9 @@ export class Boss extends Enemy {
       this.shield.hit(info);
       return;
     }
+    const dealt = Math.min(info.damage, this.health);
     this.applyDamage(info.damage, info);
-    this.ctx.score.bossDamage(info.damage, info.point);
+    this.ctx.score.bossDamage(dealt, info.point);
     if (this.alive && this.phase === 'exposed' && this.healthFraction < 0.35) this.enterPhase('critical');
   }
 
@@ -167,7 +168,7 @@ export class Boss extends Enemy {
     this.retarget -= dt;
     if (this.retarget <= 0 || this.position.distanceTo(this.moveTarget) < 8) {
       const a = rand(0, Math.PI * 2);
-      const r = rand(70, 140);
+      const r = rand(45, 95);
       this.moveTarget.set(player.position.x + Math.cos(a) * r, clamp(player.position.y + rand(15, 55), 90, 210),
         player.position.z + Math.sin(a) * r);
       this.retarget = rand(4, 7) * (critical ? 0.6 : 1);

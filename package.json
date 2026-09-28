@@ -5,7 +5,7 @@
   "description": "Armored Flight - a browser 3D powered-armor flight combat game (Three.js + Rapier)",
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19"
   },
   "scripts": {
     "dev": "vite",

@@ -49,9 +49,10 @@ export class BossShield implements Hittable {
       }
       return;
     }
+    const dealt = Math.min(info.damage, this.hp);
     this.hp -= info.damage;
     this.ctx.hud.hitMarker();
-    this.ctx.score.bossDamage(info.damage * 0.5, info.point);
+    this.ctx.score.bossDamage(dealt * 0.5, info.point);
     if (this.hp <= 0) this.collapse();
   }
 

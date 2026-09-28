@@ -111,31 +111,40 @@ def procedural_cells(obj, count, seed, interior_index):
 
 
 def cell_fracture_cells(obj, count, seed, interior_index):
-    """Run the Cell Fracture operator and convert its output to world-space bmeshes."""
-    ps = obj.modifiers.new("fracture_points", "PARTICLE_SYSTEM").particle_system
-    ps.seed = seed
-    ps.settings.count = count
-    ps.settings.frame_start = ps.settings.frame_end = 1
-    ps.settings.emit_from = "VOLUME"
-    ps.settings.distribution = "RAND"
+    """Run the Cell Fracture operator and convert its output to world-space bmeshes.
+
+    Any objects the operator created are always removed again, so a failed run cannot leak
+    stray meshes into the exported file (the caller then falls back to procedural fracture).
+    """
     before = set(bpy.data.objects)
-    for o in bpy.context.view_layer.objects:
-        o.select_set(False)
-    obj.select_set(True)
-    with bpy.context.temp_override(active_object=obj, object=obj, selected_objects=[obj],
-                                   selected_editable_objects=[obj]):
-        bpy.ops.object.add_fracture_cell_objects(
-            source={"PARTICLE_OWN"}, source_limit=count, source_noise=0.3, cell_scale=(1.0, 1.0, 1.0),
-            recursion=0, use_smooth_faces=False, use_sharp_edges=True, use_sharp_edges_apply=True,
-            use_data_match=True, use_island_split=True, margin=0.0, material_index=interior_index,
-            use_interior_vgroup=False, use_recenter=True, use_remove_original=False)
-    obj.modifiers.remove(obj.modifiers["fracture_points"])
-    created = [o for o in bpy.data.objects if o not in before and o.type == "MESH"]
-    cells = []
-    for o in sorted(created, key=lambda x: x.name):
-        cells.append(_world_bmesh(o))
-        bpy.data.objects.remove(o, do_unlink=True)
+    mod = obj.modifiers.new("fracture_points", "PARTICLE_SYSTEM")
+    try:
+        ps = mod.particle_system
+        ps.seed = seed
+        ps.settings.count = count
+        ps.settings.frame_start = ps.settings.frame_end = 1
+        ps.settings.emit_from = "VOLUME"
+        ps.settings.distribution = "RAND"
+        for o in bpy.context.view_layer.objects:
+            o.select_set(False)
+        obj.select_set(True)
+        with bpy.context.temp_override(active_object=obj, object=obj, selected_objects=[obj],
+                                       selected_editable_objects=[obj]):
+            bpy.ops.object.add_fracture_cell_objects(
+                source={"PARTICLE_OWN"}, source_limit=count, source_noise=0.3, cell_scale=(1.0, 1.0, 1.0),
+                recursion=0, use_smooth_faces=False, use_sharp_edges=True, use_sharp_edges_apply=True,
+                use_data_match=True, use_island_split=True, margin=0.0, material_index=interior_index,
+                use_interior_vgroup=False, use_recenter=True, use_remove_original=False)
+        created = sorted((o for o in bpy.data.objects if o not in before and o.type == "MESH"), key=lambda x: x.name)
+        cells = [_world_bmesh(o) for o in created]
+    finally:
+        if mod.name in obj.modifiers:
+            obj.modifiers.remove(mod)
+        for o in [o for o in bpy.data.objects if o not in before]:
+            bpy.data.objects.remove(o, do_unlink=True)
     if len(cells) < 2:
+        for bm in cells:
+            bm.free()
         raise RuntimeError("cell fracture produced no usable cells")
     return cells
 

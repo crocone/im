@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { AssetKey, Assets } from '../game/Assets';
 import { TUNING } from '../game/constants';
+import type { Physics } from '../physics/Physics';
 import type { CityBuilder } from './CityBuilder';
 import { InstancedKit } from './InstancedKit';
 
@@ -11,6 +12,18 @@ export interface DestructibleSpot {
   pos: THREE.Vector3;
   yaw: number;
 }
+
+/** Simple collision proxies per prop (local space, before yaw): boxes (half extents) or vertical cylinders. */
+type Proxy = { box: [number, number, number]; y: number } | { cyl: [number, number]; y: number };
+const PROXIES: Partial<Record<AssetKey, Proxy>> = {
+  car: { box: [0.9, 0.72, 2.3], y: 0.72 },
+  barrier: { box: [0.33, 0.42, 1.5], y: 0.42 },
+  streetLamp: { cyl: [0.16, 3.7], y: 3.7 },
+  tree: { cyl: [0.28, 1.7], y: 1.7 },
+  rooftopHvac: { box: [1.6, 1.0, 1.1], y: 1.0 },
+  rooftopVent: { cyl: [0.7, 1.15], y: 1.15 },
+  antenna: { cyl: [0.7, 7.2], y: 7.2 },
+};
 
 const CAR_COLORS = [0xd8d8d4, 0x9ea3a8, 0x1a1c20, 0x8c1c16, 0x1f3f7a, 0xd9a21b, 0x24452e, 0x5b2f6b].map(
   (c) => new THREE.Color(c),
@@ -25,7 +38,12 @@ export class CityProps {
   private readonly one = new THREE.Vector3(1, 1, 1);
   private readonly up = new THREE.Vector3(0, 1, 0);
 
-  constructor(private readonly scene: THREE.Scene, private readonly assets: Assets, private readonly city: CityBuilder) {}
+  constructor(
+    private readonly scene: THREE.Scene,
+    private readonly assets: Assets,
+    private readonly city: CityBuilder,
+    private readonly physics: Physics,
+  ) {}
 
   private kit(key: AssetKey, capacity: number, shadow = false) {
     let k = this.kits.get(key);
@@ -41,6 +59,12 @@ export class CityProps {
     const s = scale === 1 ? this.one : _s.set(scale, scale, scale);
     this.m.compose(_p.set(x, y, z), this.q, s);
     this.kit(key, 2000, key === 'tree' || key === 'antenna').add(this.m, color, 'Car_Paint');
+    const proxy = PROXIES[key];
+    if (proxy) {
+      _c.set(x, y + proxy.y * scale, z);
+      if ('box' in proxy) this.physics.fixedCuboid(_c, _h.set(...proxy.box).multiplyScalar(scale), this.q);
+      else this.physics.fixedCylinder(_c, proxy.cyl[0] * scale, proxy.cyl[1] * scale);
+    }
   }
 
   build(rnd: () => number) {
@@ -173,3 +197,5 @@ export class CityProps {
 
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
+const _c = new THREE.Vector3();
+const _h = new THREE.Vector3();

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { MissileTarget } from '../enemies/Enemy';
 import type { GameContext } from '../game/Context';
-import { quatFromForward, rotateToward, smoothstep, UP } from '../game/math';
+import { interceptTime, quatFromForward, rotateToward, smoothstep, UP } from '../game/math';
 import { G, RAPIER, type HitInfo, type Hittable } from '../physics/Physics';
 
 export type MissileKind = 'homing' | 'mini' | 'enemy';
@@ -29,17 +29,17 @@ interface Spec {
 const SPECS: Record<MissileKind, Spec> = {
   homing: {
     maxSpeed: 150, accel: 150, ignition: 0.14, guideStart: 0.22, guideBlend: 0.55, turnRate: 4.4, life: 7,
-    proximity: 2.5, damage: 150, blast: 8, scale: 1.25, trailSpacing: 1.1, trailSize: 0.9, trailLife: 2.4,
+    proximity: 2.5, damage: 150, blast: 8, scale: 1.25, trailSpacing: 0.6, trailSize: 1.2, trailLife: 2.4,
     colliderRadius: 0.35, membership: G.PLAYER_MISSILE, mask: G.WORLD | G.ENEMY | G.SHIELD | G.DEBRIS,
   },
   mini: {
     maxSpeed: 128, accel: 210, ignition: 0.05, guideStart: 0.12, guideBlend: 0.3, turnRate: 7, life: 4.2,
-    proximity: 2, damage: 55, blast: 4.5, scale: 0.65, trailSpacing: 1.4, trailSize: 0.5, trailLife: 1.5,
+    proximity: 2.5, damage: 55, blast: 4.5, scale: 0.65, trailSpacing: 0.7, trailSize: 0.8, trailLife: 1.4,
     colliderRadius: 0.2, membership: G.PLAYER_MISSILE, mask: G.WORLD | G.ENEMY | G.SHIELD | G.DEBRIS,
   },
   enemy: {
     maxSpeed: 74, accel: 60, ignition: 0.1, guideStart: 0.3, guideBlend: 0.7, turnRate: 1.3, life: 9,
-    proximity: 3, damage: 20, blast: 6, scale: 1.0, trailSpacing: 1.2, trailSize: 0.8, trailLife: 2.2,
+    proximity: 3, damage: 20, blast: 6, scale: 1.0, trailSpacing: 0.7, trailSize: 1.0, trailLife: 2.2,
     colliderRadius: 0.6, membership: G.ENEMY_MISSILE, mask: G.WORLD | G.PLAYER | G.DEBRIS,
   },
 };
@@ -49,6 +49,7 @@ const _next = new THREE.Vector3();
 const _desired = new THREE.Vector3();
 const _aim = new THREE.Vector3();
 const _tail = new THREE.Vector3();
+const _start = new THREE.Vector3();
 const EXHAUST_PLAYER = new THREE.Color(3.2, 2.0, 1.0);
 const EXHAUST_ENEMY = new THREE.Color(3.4, 0.9, 0.5);
 
@@ -72,6 +73,7 @@ export class Missile implements Hittable {
   private readonly drift = new THREE.Vector3();
   private speed = 0;
   private age = 0;
+  private lastDist = Infinity;
   private trailCarry = 0;
   private readonly body: RAPIER.RigidBody;
   private readonly collider: RAPIER.Collider;
@@ -107,6 +109,7 @@ export class Missile implements Hittable {
     this.hasAim = !!aim;
     if (aim) this.aimPoint.copy(aim);
     this.age = 0;
+    this.lastDist = Infinity;
     this.trailCarry = 0;
     this.mesh.visible = true;
     this.body.setTranslation(pos, true);
@@ -129,13 +132,17 @@ export class Missile implements Hittable {
     // guidance: blend in after the boost-out so the missile arcs away from the launcher first
     const guide = smoothstep(s.guideStart, s.guideStart + s.guideBlend, this.age);
     const tgt = this.target && this.target.alive ? this.target : null;
+    const dist = tgt ? this.position.distanceTo(tgt.position) : Infinity;
     if (guide > 0 && (tgt || this.hasAim)) {
+      let turn = s.turnRate;
       if (tgt) {
-        const tti = Math.min(2, this.position.distanceTo(tgt.position) / Math.max(this.speed, 20));
-        _aim.copy(tgt.position).addScaledVector(tgt.velocity, tti * 0.8);
+        // lead the target to the intercept point; tighten the turn in the terminal phase
+        const tti = interceptTime(this.position, tgt.position, tgt.velocity, Math.max(this.speed, 30));
+        _aim.copy(tgt.position).addScaledVector(tgt.velocity, Math.min(tti, 3));
+        if (dist < 60) turn *= 1 + (60 - dist) / 30;
       } else _aim.copy(this.aimPoint);
       _desired.subVectors(_aim, this.position).normalize();
-      rotateToward(this.dir, _desired, s.turnRate * guide * dt);
+      rotateToward(this.dir, _desired, turn * guide * dt);
     }
     this.drift.multiplyScalar(Math.exp(-2.5 * dt));
     this.velocity.copy(this.dir).multiplyScalar(this.speed).add(this.drift);
@@ -147,15 +154,20 @@ export class Missile implements Hittable {
       this.explode(hit.owner ?? null);
       return;
     }
-    // proximity fuse
+    // proximity fuse, plus a closest-approach fuse so near misses detonate instead of orbiting
     if (tgt && _next.distanceTo(tgt.position) < tgt.radius + s.proximity) {
       this.position.copy(_next);
       this.explode(this.type === 'enemy' ? null : (tgt as unknown as Hittable));
       return;
     }
+    if (tgt && guide > 0.5 && dist < tgt.radius + s.blast * 1.4 && dist > this.lastDist + 0.05) {
+      this.explode(null);
+      return;
+    }
+    this.lastDist = dist;
     // trail + exhaust
     _tail.copy(this.dir).multiplyScalar(-0.8 * s.scale).add(_next);
-    this.trailCarry = this.ctx.fx.trail(this.position.clone().addScaledVector(this.dir, -0.8 * s.scale), _tail,
+    this.trailCarry = this.ctx.fx.trail(_start.copy(this.position).addScaledVector(this.dir, -0.8 * s.scale), _tail,
       s.trailSpacing, s.trailSize, s.trailLife, this.trailCarry);
     this.ctx.fx.exhaust(_tail, 1.3 * s.scale, this.type === 'enemy' ? EXHAUST_ENEMY : EXHAUST_PLAYER);
     this.position.copy(_next);

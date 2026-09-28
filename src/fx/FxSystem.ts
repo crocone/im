@@ -17,6 +17,7 @@ export class FxSystem {
   readonly textures = new FxTextures();
   readonly glow: Particles;
   readonly smoke: Particles;
+  readonly trails: Particles;
   readonly sparks: Particles;
   readonly rings: Particles;
   readonly lights: LightPool;
@@ -25,10 +26,11 @@ export class FxSystem {
 
   constructor(scene: THREE.Scene) {
     this.glow = new Particles(3000, this.textures.soft, true);
-    this.smoke = new Particles(7000, this.textures.smoke, false);
+    this.smoke = new Particles(5000, this.textures.smoke, false);
+    this.trails = new Particles(12000, this.textures.puff, false);
     this.sparks = new Particles(2500, this.textures.hard, true, 0.045);
     this.rings = new Particles(64, this.textures.ring, true);
-    for (const p of [this.smoke, this.glow, this.sparks, this.rings]) scene.add(p.mesh);
+    for (const p of [this.trails, this.smoke, this.glow, this.sparks, this.rings]) scene.add(p.mesh);
     this.lights = new LightPool(scene, 6);
     this.beams = new BeamFx(scene, 16);
     this.explosions = new ExplosionFx(this.glow, this.smoke, this.sparks, this.rings, this.lights);
@@ -40,7 +42,7 @@ export class FxSystem {
     let d = carry;
     while (d < len) {
       _v.lerpVectors(from, to, d / len);
-      this.smoke.emit({
+      this.trails.emit({
         pos: _v,
         vel: new THREE.Vector3(rand(-0.6, 0.6), rand(0.2, 1.0), rand(-0.6, 0.6)),
         life: life * rand(0.8, 1.2),
@@ -48,7 +50,7 @@ export class FxSystem {
         size1: size * rand(4, 6),
         color: SMOKE_TRAIL,
         color1: SMOKE_TRAIL_END,
-        alpha: 0.5,
+        alpha: 0.75,
         alpha1: 0,
         drag: 0.8,
         spin: rand(-0.4, 0.4),
@@ -74,6 +76,7 @@ export class FxSystem {
   update(dt: number, time: number) {
     this.glow.update(dt);
     this.smoke.update(dt);
+    this.trails.update(dt);
     this.sparks.update(dt);
     this.rings.update(dt);
     this.lights.update(dt);
@@ -83,6 +86,7 @@ export class FxSystem {
   clear() {
     this.glow.clear();
     this.smoke.clear();
+    this.trails.clear();
     this.sparks.clear();
     this.rings.clear();
     this.lights.clear();

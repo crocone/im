@@ -68,7 +68,7 @@ export class BeamFx {
     }
   }
 
-  fire(from: THREE.Vector3, to: THREE.Vector3, width = 0.09, life = 0.13, color?: THREE.Color) {
+  fire(from: THREE.Vector3, to: THREE.Vector3, width = 0.12, life = 0.14, color?: THREE.Color) {
     const b = this.pool.find((p) => p.age >= p.life) ?? this.pool[0];
     _dir.subVectors(to, from);
     const len = _dir.length();
@@ -92,8 +92,8 @@ export class BeamFx {
   private apply(b: Beam) {
     const t = Math.min(1, b.age / b.life);
     const w = b.width * (1 - t * 0.6);
-    b.core.scale.x = b.core.scale.z = w * 0.45;
-    b.glow.scale.x = b.glow.scale.z = w * 2.4;
+    b.core.scale.x = b.core.scale.z = w * 0.5;
+    b.glow.scale.x = b.glow.scale.z = w * 3.2;
     (b.core.material as THREE.ShaderMaterial).uniforms.uAlpha.value = (1 - t) * 1.0;
     (b.glow.material as THREE.ShaderMaterial).uniforms.uAlpha.value = (1 - t) * 0.55;
   }

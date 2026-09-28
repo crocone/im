@@ -46,7 +46,7 @@ export class CityBuilder {
     this.blocks = planCity();
     this.buildStreets();
     this.buildBuildings();
-    this.props = new CityProps(scene, assets, this);
+    this.props = new CityProps(scene, assets, this, physics);
     this.props.build(seeded(99));
     this.buildBoundary();
   }

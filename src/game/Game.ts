@@ -78,6 +78,9 @@ export class Game {
     ctx.input.onUnlock = () => {
       if (this.state === 'playing') this.pause();
     };
+    canvas.addEventListener('click', () => {
+      if (this.state === 'playing' && !ctx.input.locked) ctx.input.requestLock();
+    });
     overlays.onStart = () => this.newGame();
     overlays.onResume = () => this.resume();
     overlays.onRestart = () => this.newGame();
@@ -171,8 +174,10 @@ export class Game {
   }
 
   private frame() {
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const realDt = this.clock.getDelta();
+    const dt = Math.min(realDt, 0.05);
     this.renderer.info.reset();
+    if (this.state === 'playing') this.renderer.adapt(realDt);
     const c = this.ctx;
     if (this.state === 'playing') this.handleKeys();
     if (this.state === 'playing' || this.state === 'dead' || this.state === 'victory') this.simulate(dt);
