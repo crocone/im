@@ -72,7 +72,7 @@ def column_parts():
 def sign_parts():
     frame = material("Metal_Dark", (0.055, 0.06, 0.065), 0.75, 0.5)
     inner = material("Metal_Broken", (0.26, 0.26, 0.27), 0.6, 0.6)
-    lamp = material("Lamp_Warm", (1.0, 0.85, 0.6), 0.0, 0.4, (1.0, 0.76, 0.42), 9.0)
+    lamp = material("Lamp_Warm", (1.0, 0.85, 0.6), 0.0, 0.4, (1.0, 0.76, 0.42), 3.5)
     ad = image("Billboard", ad_texture)
     face = material("Billboard", (1, 1, 1), 0.0, 0.5, (1, 1, 1), 1.6, ad, ad)
     parts = []
@@ -107,11 +107,11 @@ def water_tower_parts():
         cross = [box("brace", (length * 1.25, 0.07, 0.07), ((x0 + x1) / 2, (y0 + y1) / 2, 2.1), steel,
                      rot=(0, tilt, ang)) for tilt in (38, -38)]
         parts.append((join(cross, "brace"), 1, broken))
-    parts.append((tube("platform", 3.15, 2.5, 0.15, (0, 0, 4.17), steel, segments=20), 2, broken))
-    parts.append((cylinder("tank", 2.8, 4.4, (0, 0, 6.45), wood, segments=20), 8, inner))
+    parts.append((tube("platform", 3.15, 2.5, 0.15, (0, 0, 4.17), steel, segments=16), 2, broken))
+    parts.append((cylinder("tank", 2.8, 4.4, (0, 0, 6.45), wood, segments=16), 8, inner))
     for z in (5.0, 6.4, 7.8):
-        parts.append((tube("band", 2.87, 2.79, 0.12, (0, 0, z), steel, segments=20), 1, broken))
-    parts.append((cylinder("roof", 3.0, 1.5, (0, 0, 9.4), roof, segments=20, r2=0.25), 3, broken))
+        parts.append((tube("band", 2.87, 2.79, 0.12, (0, 0, z), steel, segments=16), 1, broken))
+    parts.append((cylinder("roof", 3.0, 1.5, (0, 0, 9.4), roof, segments=16, r2=0.25), 3, broken))
     parts.append((icosphere("finial", 0.2, (0, 0, 10.25), steel), 1, broken))
     return parts
 
@@ -156,7 +156,7 @@ def make(file, root_name, builder, seed):
     root = empty(root_name)
     intact = join(copies, f"{root_name}_Intact")
     parent_keep(intact, root)
-    export(f"{file}.glb")
+    export(f"{file}.glb", only=[root])
     bpy.data.objects.remove(intact, do_unlink=True)
     bpy.data.objects.remove(root, do_unlink=True)
     # fractured

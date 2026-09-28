@@ -128,7 +128,7 @@ def palette():
         "accent": material("Armor_Copper", (0.6, 0.17, 0.045), 0.9, 0.28),
         "trim": material("Armor_Steel", (0.48, 0.5, 0.53), 0.95, 0.22),
         "joint": material("Joint_Dark", (0.018, 0.018, 0.022), 0.55, 0.55),
-        "glow": material("Emissive_Cyan", (0.55, 0.92, 1.0), 0.0, 0.3, (0.42, 0.85, 1.0), 9.0),
+        "glow": material("Emissive_Cyan", (0.55, 0.92, 1.0), 0.0, 0.3, (0.42, 0.85, 1.0), 4.0),
         # hostile machines
         "e_hull": material("Enemy_Hull", (0.045, 0.048, 0.055), 0.75, 0.42),
         "e_plate": material("Enemy_Plate", (0.2, 0.205, 0.215), 0.85, 0.34),
@@ -488,7 +488,8 @@ def keyframe_poses(nodes, poses):
 # --------------------------------------------------------------------------- export
 
 
-def export(filename, animations=False):
+def export(filename, animations=False, only=None):
+    """Export the scene (or only the hierarchies rooted at ``only``) to public/assets/<filename>."""
     os.makedirs(OUT_DIR, exist_ok=True)
     path = os.path.join(OUT_DIR, filename)
     if os.path.exists(path):
@@ -507,6 +508,13 @@ def export(filename, animations=False):
     )
     if animations:
         args["export_animation_mode"] = "ACTIONS"
+    if only:
+        for o in bpy.context.view_layer.objects:
+            o.select_set(False)
+        for root in only:
+            for o in [root] + list(root.children_recursive):
+                o.select_set(True)
+        args["use_selection"] = True
     # Generated textures are photographic noise: JPEG keeps the GLBs small.
     props = bpy.ops.export_scene.gltf.get_rna_type().properties
     args["export_image_format"] = "JPEG"

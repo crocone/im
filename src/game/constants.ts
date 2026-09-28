@@ -1,0 +1,86 @@
+/** Gameplay tuning in one place (SI units: metres, seconds, m/s). */
+export const TUNING = {
+  city: {
+    blocks: 9,
+    pitch: 100,
+    roadHalfWidth: 10,
+    boundary: 620,
+    ceiling: 420,
+  },
+  flight: {
+    accel: 40,
+    strafeAccel: 24,
+    verticalAccel: 26,
+    boostAccel: 92,
+    maxSpeed: 72,
+    boostSpeed: 128,
+    linearDrag: 0.12,
+    velocityAlign: 1.6,
+    mouseSensitivity: 0.0021,
+    rollRate: 2.6,
+    rollAssist: 2.2,
+  },
+  hover: {
+    accel: 34,
+    verticalAccel: 30,
+    maxSpeed: 30,
+    damping: 2.4,
+    pitchLimit: (80 * Math.PI) / 180,
+  },
+  energy: {
+    max: 100,
+    regen: 15,
+    regenDelay: 0.7,
+    boostDrain: 19,
+    repulsorCost: 6,
+  },
+  armor: {
+    max: 100,
+    waveRepair: 35,
+    collisionThreshold: 34,
+  },
+  repulsor: {
+    interval: 0.15,
+    damage: 22,
+    range: 900,
+    impulse: 9,
+  },
+  missiles: {
+    max: 8,
+    miniMax: 24,
+    salvo: 6,
+    damage: 150,
+    miniDamage: 55,
+    radius: 8,
+    miniRadius: 4.5,
+    regenInterval: 9,
+  },
+  lock: {
+    cone: (13 * Math.PI) / 180,
+    breakCone: (32 * Math.PI) / 180,
+    time: 1.05,
+    bossTime: 1.5,
+    range: 900,
+    miniCone: (42 * Math.PI) / 180,
+    miniRange: 480,
+  },
+  debris: {
+    maxActive: 80,
+    lifetime: 5,
+    maxFrozenPiles: 40,
+  },
+  waves: {
+    recovery: 6,
+  },
+} as const;
+
+export const SCORE = {
+  drone: 100,
+  turret: 250,
+  intercept: 50,
+  destructible: 75,
+  bossDamage: 1,
+  bossKill: 5000,
+  comboWindow: 3.2,
+  maxCombo: 5,
+} as const;

@@ -28,8 +28,8 @@ from textures import (  # noqa: E402
 
 
 FACADE_PBR = {
-    "office": (0.55, 0.15, 2.4), "glass": (0.2, 0.55, 2.0), "band": (0.5, 0.2, 2.4),
-    "brick": (0.82, 0.0, 2.4), "industrial": (0.45, 0.55, 2.0), "residential": (0.75, 0.0, 2.4),
+    "office": (0.55, 0.15, 2.0), "glass": (0.2, 0.55, 2.0), "band": (0.5, 0.2, 2.0),
+    "brick": (0.82, 0.0, 2.0), "industrial": (0.45, 0.55, 2.0), "residential": (0.75, 0.0, 2.0),
 }
 
 
@@ -59,8 +59,8 @@ MAT_DEFS = {
     "glass_dark": lambda: material("Glass_Dark", (0.02, 0.03, 0.04), 0.9, 0.12),
     "foliage": lambda: material("Foliage", (0.055, 0.15, 0.04), 0.0, 0.9),
     "bark": lambda: material("Bark", (0.16, 0.1, 0.06), 0.0, 0.9),
-    "beacon": lambda: material("Beacon_Red", (1.0, 0.1, 0.05), 0.0, 0.4, (1.0, 0.05, 0.02), 25.0),
-    "lamp": lambda: material("Lamp_Warm", (1.0, 0.85, 0.6), 0.0, 0.4, (1.0, 0.76, 0.42), 9.0),
+    "beacon": lambda: material("Beacon_Red", (1.0, 0.1, 0.05), 0.0, 0.4, (1.0, 0.05, 0.02), 12.0),
+    "lamp": lambda: material("Lamp_Warm", (1.0, 0.85, 0.6), 0.0, 0.4, (1.0, 0.76, 0.42), 3.5),
     "helipad": lambda: material("Helipad", (1, 1, 1), 0.0, 0.8, base_tex=image("Helipad", helipad_texture)),
     "road": lambda: material("Road", (1, 1, 1), 0.0, 0.88, base_tex=image("Road", road_texture)),
     "junction": lambda: material("Junction", (1, 1, 1), 0.0, 0.88,
@@ -73,8 +73,8 @@ MAT_DEFS = {
     "paint": lambda: material("Car_Paint", (0.8, 0.8, 0.8), 0.55, 0.32),
     "tire": lambda: material("Tire", (0.02, 0.02, 0.02), 0.0, 0.85),
     "chrome": lambda: material("Chrome", (0.7, 0.72, 0.75), 1.0, 0.2),
-    "headlight": lambda: material("Headlight", (1, 1, 0.95), 0.0, 0.2, (1.0, 0.95, 0.85), 10.0),
-    "taillight": lambda: material("Taillight", (0.8, 0.05, 0.03), 0.0, 0.3, (1.0, 0.04, 0.02), 8.0),
+    "headlight": lambda: material("Headlight", (1, 1, 0.95), 0.0, 0.2, (1.0, 0.95, 0.85), 4.0),
+    "taillight": lambda: material("Taillight", (0.8, 0.05, 0.03), 0.0, 0.3, (1.0, 0.04, 0.02), 4.0),
     "hazard": lambda: material("Barrier_Stripe", (0.8, 0.1, 0.05), 0.0, 0.6),
     "white": lambda: material("Barrier_White", (0.85, 0.85, 0.82), 0.0, 0.6),
     "skyline": _skyline,
@@ -494,8 +494,8 @@ def car():
     ]
     for sx in (-1, 1):
         for sy in (-1, 1):
-            objs.append(cylinder("wheel", 0.34, 0.24, (sx * 0.8, sy * 1.38, 0.34), M["tire"], (0, 90, 0), 14))
-            objs.append(cylinder("hub", 0.2, 0.26, (sx * 0.8, sy * 1.38, 0.34), M["chrome"], (0, 90, 0), 10))
+            objs.append(cylinder("wheel", 0.34, 0.24, (sx * 0.8, sy * 1.38, 0.34), M["tire"], (0, 90, 0), 10))
+            objs.append(cylinder("hub", 0.2, 0.26, (sx * 0.8, sy * 1.38, 0.34), M["chrome"], (0, 90, 0), 8))
         objs.append(box("headlight", (0.38, 0.06, 0.12), (sx * 0.58, -2.26, 0.68), M["headlight"]))
         objs.append(box("taillight", (0.4, 0.06, 0.1), (sx * 0.6, 2.27, 0.72), M["taillight"]))
     prop("Car", objs, "car.glb")
@@ -521,8 +521,8 @@ def rooftop_hvac():
         box("unit", (3.0, 2.0, 1.5), (0, 0, 1.0), M["metal"], bevel=0.05),
     ]
     for x in (-0.75, 0.75):
-        objs.append(tube("fan_ring", 0.62, 0.52, 0.18, (x, 0, 1.82), M["metal_dark"], segments=18))
-        objs.append(cylinder("fan", 0.52, 0.04, (x, 0, 1.76), M["concrete_dark"], segments=18))
+        objs.append(tube("fan_ring", 0.62, 0.52, 0.18, (x, 0, 1.82), M["metal_dark"], segments=12))
+        objs.append(cylinder("fan", 0.52, 0.04, (x, 0, 1.76), M["concrete_dark"], segments=12))
     for i in range(6):
         objs.append(box("louver", (0.04, 1.8, 0.08), (1.52, 0, 0.5 + i * 0.18), M["metal_dark"]))
     objs.append(cylinder("duct", 0.25, 1.6, (-1.9, 0.5, 0.8), M["metal"], (0, 90, 0), 10))
