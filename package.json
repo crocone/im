@@ -1,0 +1,27 @@
+{
+  "name": "armored-flight",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Armored Flight - a browser 3D powered-armor flight combat game (Three.js + Rapier)",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "vite",
+    "assets": "node tools/build-assets.mjs",
+    "assets:verify": "node tools/verify-assets.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "node tools/verify-assets.mjs && tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.6"
+  }
+}
