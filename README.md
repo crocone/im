@@ -5,6 +5,19 @@ destructible city at sunset, fighting drone swarms, rooftop missile batteries an
 armored behemoth.
 
 ![Armored Flight](docs/screenshot.jpg)
+ 
+  <!-- coders-talk:repo -->
+## Built with AI
+
+[![Build a browser-based 3D flight-combat game with Blender-procedural assets](https://coders.talk/embed/b/build-a-browser-based-3d-flight-combat-game-with-blender-procedural-as.svg)](https://coders.talk/b/build-a-browser-based-3d-flight-combat-game-with-blender-procedural-as?utm_source=github&utm_medium=readme&utm_campaign=build)
+
+**Build a browser-based 3D flight-combat game with Blender-procedural assets**  
+Claude Code · Opus 5.5  
+3h 17m · zero-touch · 1 agent fail
+
+[View the full build →](https://coders.talk/b/build-a-browser-based-3d-flight-combat-game-with-blender-procedural-as?utm_source=github&utm_medium=readme&utm_campaign=build)
+<!-- /coders-talk:repo -->
+ 
 
 - **Runtime:** Vite + TypeScript + Three.js, with Rapier (`@dimforge/rapier3d-compat`, WASM) for
   physics and an HTML/CSS HUD. Everything runs client-side, with no server, backend or network API.
